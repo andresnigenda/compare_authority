@@ -31,18 +31,30 @@ This tool runs on python 3.x, any further requirements are specified in ```requi
 
 ## Usage
 You will want to clone or fork this project in order to run the program.
-### Defining global information
-Fill in any user and database specific information in ```compare_config.ini```. 
+### Defining user specific information
 
-Specify your local database's information in the ```[local]``` section like:
+You will need to create a text file named ```passwords.ini```. Paste and fill the following text with the relevant information.
+If you are not using the OCLC api, you may not include that section; you don't need credentials when you want to compare with the LOC API.
+
 ```
+[oclc]
+WC_KEY = your_wc_key
+SECRET = your_secret
+PRINCIPAL_ID = your_principal_id
+PRINCIPAL_IDNS = your_principal_idns
+
+[local]
 USER = your_user
 PASSWORD = your_password
 HOST = database_host_information
 DATABASE = database_name
 ```
 
-Specify the subfields you would like to compare in ```[subfields]``` separated by commas.
+How to lookup idns and id: https://help.oclc.org/Metadata_Services/WorldShare_Collection_Manager/Troubleshooting/How_do_I_set_up_Marc_Edit_OCLC_Integration
+
+### Defining subfields, queries and tags
+
+Specify the subfields you would like to compare for your tags in ```[subfields]``` separated by commas.
 
 Specify your SQL queries depending on the API in ```SQL_OCLC_QUERY``` or/and ```SQL_LOC_QUERY```. You will need to extract the following fields for each record from your local database; all fields are required unless otherwise stated:
 - bib_id: a bib id
@@ -54,8 +66,6 @@ Specify your SQL queries depending on the API in ```SQL_OCLC_QUERY``` or/and ```
 
 If the api is OCLC, you will also need the following field:
 - oclc: an oclc number
-
-Put down your OCLC credentials in the ```[oclc]``` section. You don't need credentials when you want to compare with the LOC API.
 
 ### Running the tool
 After filling in your information in ```compare_config.ini```, you may run the project from your shell (e.g. bash or powershell). Navigate to ```src/``` and run the following command:
@@ -77,10 +87,10 @@ python compare.py oclc all
 
 Note that the API (oclc or loc) should always be specified and the maximum number of records must be specified as an integer or ```all```.
 
-### Looking at your results
-Your log and report of inconsistencies will appear in the ```outputs/``` folder with the following structure:
-
-INSERT PIC HERE?
+### Checking your results
+Your log and report of inconsistencies will appear in the ```outputs/``` folder with the following information: 
+- log: bib_id, tag, subfield, uchicago_name, authority_name, language, location
+- report: timestamp, bib_id, tag, ord, authority_id, error_message
 
 ## Acknowledgements
 

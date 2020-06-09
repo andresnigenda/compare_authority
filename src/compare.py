@@ -47,7 +47,7 @@ USER_DEFINED_SUBFIELDS = [s.replace(" ", "") for s in USER_DEFINED_SUBFIELDS.spl
 USER_DEFINED_TAG = config.get("subfields", "USER_DEFINED_TAG")
 
 # Throttle
-T = 2
+T = 1
 
 
 # General functions for analysis of MARC fields
