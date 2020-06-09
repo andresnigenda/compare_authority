@@ -6,7 +6,7 @@ Disclaimer: XYZ
 ## Motivation
 UChicago's Library has been working on linking names with standard identifiers (URIs) to enhance user experience. This is achieved by using MarcEdit to batch process the existing records and link them to the Library of Congress’ (LOC) Name Authority File (NAF).
 
-This tool compares headings in the 100, 600 and 700 fields of the local MARC table with headings in the 100 field in the LOC's NAF. It also compares headings in the 100 fields of the local MARC table with headings in the 100 fields of OCLC's Worldcat Metadata API and returns a report flagging inconsistent records as well as a log file.
+This tool compares headings in the fields of the local MARC table with headings in the corresponding field in the LOC's NAF. It also compares headings in the 100 fields of the local MARC table with headings in the 100 fields of OCLC's Worldcat Metadata API and returns a report flagging inconsistent records as well as a log file.
 
 ## Prerequisites
 This guide assumes that:
