@@ -1,6 +1,6 @@
 ##################################################################
 # Source code for comparing MARC data with OCLC and LOC's MARC XML
-# May 2020
+# June 2020
 ##################################################################
 
 # import functions
@@ -36,10 +36,13 @@ HOST = passwords.get("local", "HOST")
 DATABASE = passwords.get("local", "DATABASE")
 
 # Get OcLC user information
-WC_KEY = passwords.get("oclc", "WC_KEY")
-SECRET = passwords.get("oclc", "SECRET")
-PRINCIPAL_ID = passwords.get("oclc", "PRINCIPAL_ID")
-PRINCIPAL_IDNS = passwords.get("oclc", "PRINCIPAL_IDNS")
+try:
+    WC_KEY = passwords.get("oclc", "WC_KEY")
+    SECRET = passwords.get("oclc", "SECRET")
+    PRINCIPAL_ID = passwords.get("oclc", "PRINCIPAL_ID")
+    PRINCIPAL_IDNS = passwords.get("oclc", "PRINCIPAL_IDNS")
+except Exception as e:
+    print("No OCLC keys provided")
 
 
 USER_DEFINED_SUBFIELDS = config.get("subfields", "USER_DEFINED_SUBFIELDS")
@@ -47,7 +50,7 @@ USER_DEFINED_SUBFIELDS = [s.replace(" ", "") for s in USER_DEFINED_SUBFIELDS.spl
 USER_DEFINED_TAG = config.get("subfields", "USER_DEFINED_TAG")
 
 # Throttle
-T = 1
+T = 3
 
 
 # General functions for analysis of MARC fields
@@ -72,6 +75,7 @@ def compare_records(usr=USER, pwd=PASSWORD, api='loc', limit=1000, hst=HOST, db=
     try:
         # connect to database
         # add oclc 035 tag if query is to OCLC api
+        
         if api == "oclc":
             query = config.get("sql", "SQL_OCLC_QUERY").replace("\n", " ").replace("\'", "'")
         elif api == "loc":
@@ -80,13 +84,25 @@ def compare_records(usr=USER, pwd=PASSWORD, api='loc', limit=1000, hst=HOST, db=
             print("[!] Invalid API name, defaulting to LOC")
             api = "loc"
             query = config.get("sql", "SQL_LOC_QUERY").replace("\n", " ").replace("\'", "'")
+
+        if api == "oclc":
+            authority_tag = re.search('tag in \((\d+)', query).group(1)
+            assert USER_DEFINED_TAG == authority_tag
         
+        if api == "loc":
+            # TO DO this needs to check each tag
+            authority_tag = re.search('tag in \((\d+)', query).group(1)
+            assert USER_DEFINED_TAG[-2:] == authority_tag[-2:]
         
         # add a limit to the query
         if limit != 'all':
             query += " limit {} ".format(batch_size)
 
-        print(query)
+        print("")
+        print("Your SQL query: ", query)
+        print("")
+        print("Comparing subfields {} in tag {} with tag {}".format(USER_DEFINED_SUBFIELDS, USER_DEFINED_TAG, authority_tag))
+        print("")
 
         connection, cursor = connect_to_database(usr, pwd, hst, db, query)
 
@@ -113,8 +129,11 @@ def compare_records(usr=USER, pwd=PASSWORD, api='loc', limit=1000, hst=HOST, db=
 
         if return_mode:
             return authority_dict
+    except AssertionError as e:
+        print("Non-valid tag comparison")
     except Exception as e:
         print("Unexpected main program error:", e)
+    
 
 def create_oclc_session(key, scrt, ppid, pidns):
     '''
@@ -224,24 +243,27 @@ def compare_subfields(local_d, authority_d, inconsistencies_path, session):
     # append to csv
     with open(inconsistencies_path, "a", newline="") as f:
         w = csv.writer(f)
-        for sf, content in local_d['marc'].items():
-            try:
-                if sf != '0':
-                    # step 1: strip punctuation and accents
-                    local_sf = strip_punct(content)
-                    try: #handle when sf does not exist in authority
-                        authority_sf = strip_punct(authority_content[0][sf])
-                    except Exception as nonloc:
-                        authority_sf = '{} does not exist in authority'.format(nonloc)
-                    # step 2: compare
-                    if local_sf != authority_sf:
-                        #current_inconsistencies[sf] = [uchicago_sf, loc_sf]
-                        w.writerow([local_d['bib_id'], local_d['tag'], sf, local_sf, authority_sf, 
-                                    local_d.get('language'), local_d.get('location')])
-                    else:
-                        continue
-            except Exception as e:
-                print("e2: ", local_d, e)
+        for sf, lst_content in local_d['marc'].items():
+            for content in lst_content:
+                try:
+                    if sf != '0':
+                        # step 1: strip punctuation and accents
+                        local_sf = strip_punct(content)
+                        try: #handle when sf does not exist in authority
+                            authority_sf_lst = []
+                            for authority_sf in authority_content[0][sf]:
+                               authority_sf_lst.append(strip_punct(authority_sf))
+                        except Exception as nonloc:
+                            authority_sf = '{} does not exist in authority'.format(nonloc)
+                        # step 2: compare
+                        if local_sf not in authority_sf_lst:
+                            #current_inconsistencies[sf] = [uchicago_sf, loc_sf]
+                            w.writerow([local_d['bib_id'], local_d['tag'], sf, local_sf, authority_sf_lst,
+                                        local_d.get('language'), local_d.get('location')])
+                        else:
+                            continue
+                except Exception as e:
+                    print("e2: ", local_d, e)
 
 
 def fetch_authority_content(authority_id, authority_dict, session):
@@ -311,7 +333,10 @@ def fetch_data(uchicago_cursor):
             # add uri
             # extract info and initialize in own dictionary
             if api == 'loc':
-                temp_dict['authority_id'] = sf_dict.get('0', None)
+                try:
+                    temp_dict['authority_id'] = sf_dict.get('0', None)[0]
+                except Exception as e:
+                    print("0 sf does not exist")
             elif api == 'oclc':
                 temp_dict['authority_id'] = temp_dict.get('oclc', None)
             temp_dict['marc'] = sf_dict
@@ -335,6 +360,8 @@ def extract_subfields(a_string, USER_DEFINED_SUBFIELDS=USER_DEFINED_SUBFIELDS):
     '''
     # split into subfields
     subfields = re.split(r"[\$]", a_string)[1 : ]
+    # add subfield 0
+    USER_DEFINED_SUBFIELDS.append('0')
     result = fetch_subfields(subfields, USER_DEFINED_SUBFIELDS, is_xml=False)
 
     return result
@@ -351,7 +378,8 @@ def fetch_subfields(subfields, check_lst, is_xml=True):
             tag is being fed (e.g. subfields  = ["aName,", "qFuller Name,", ])
     
     Outputs: 
-        - result (dict): a dictionary with subfields for a given tag
+        - result (dict): a dictionary with subfields for a given tag; each subfield
+            will have a list
     '''
     result = {}
 
@@ -366,7 +394,13 @@ def fetch_subfields(subfields, check_lst, is_xml=True):
             sf_text = sf[1:]
 
         if subfield in check_lst:
-            result[subfield] = sf_text
+            if result.get(subfield):
+                # if the subfield exists, append the text to the list
+                result[subfield].append(sf_text)
+            else:
+                # create a list with the subfield text in it
+                result[subfield] = [sf_text]
+
 
     return result
 
@@ -403,7 +437,7 @@ def fetch_authority_names(root, loc_tag='100'):
     try:
         # iterate through root object for children with the datafield tag
         for child in root.iter("{http://www.loc.gov/MARC21/slim}datafield"):
-            # get 100 tag (preferred name)
+            # get appropriate tag
             if child.attrib['tag'] == USER_DEFINED_TAG:
                 # get subfields
                 result_100 = fetch_subfields(child, USER_DEFINED_SUBFIELDS)

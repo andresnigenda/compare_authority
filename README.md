@@ -34,7 +34,7 @@ You will want to clone or fork this project in order to run the program.
 ### Defining user specific information
 
 You will need to create a text file named ```passwords.ini```. Paste and fill the following text with the relevant information.
-If you are not using the OCLC api, you may not include that section; you don't need credentials when you want to compare with the LOC API.
+If you are not using the OCLC API, you can not include that section; you don't need credentials when you want to compare with the LOC API.
 
 ```
 [oclc]
