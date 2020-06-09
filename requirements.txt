@@ -1,0 +1,6 @@
+requests==2.23.0
+chardet==3.0.4
+Unidecode==1.1.1
+tqdm==4.36.1
+bookops_worldcat==0.2.0
+mysql_connector_repackaged==0.3.1
