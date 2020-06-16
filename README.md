@@ -1,12 +1,10 @@
 # Authority Compare
 A tool that compares a library's local MARC table against OCLC or LOC MARC authority data.
 
-Disclaimer: XYZ
-
 ## Motivation
-UChicago's Library has been working on linking names with standard identifiers (URIs) to enhance user experience. This is achieved by using MarcEdit to batch process the existing records and link them to the Library of Congress’ (LOC) Name Authority File (NAF).
+UChicago's Library has been working on linking names with standard identifiers (URIs). This is achieved by using MarcEdit to batch process the existing records and link them to the Library of Congress’ (LOC) Name Authority File (NAF).
 
-This tool compares headings in the fields of the local MARC table with headings in the corresponding field in the LOC's NAF. It also compares headings in the 100 fields of the local MARC table with headings in the 100 fields of OCLC's Worldcat Metadata API and returns a report flagging inconsistent records as well as a log file.
+ This tool was designed to assist in identifying updated/inconsistent headings and thus contribute to the robustness of the library's linked data. It compares headings in the fields of the local MARC table with headings in the LOC's NAF API or OCLC's Worldcat Metadata API. The tool returns a report flagging inconsistent records as well as a log file.
 
 ## Prerequisites
 This guide assumes that:
@@ -31,10 +29,14 @@ This tool runs on python 3.x, any further requirements are specified in ```requi
 
 ## Usage
 You will want to clone or fork this project in order to run the program.
+
+As of this iteration, this tool allows you to:
+- Compare the text content of the subfields in any given tags in your database with the LOC NAF's corresponding valid tag (e.g. 100, 600, 700 vs 100; 650 vs 150).
+-  Compare the text content of the subfields in a given tags in your database with the OCLC Worldcat Metadata API's corresponding valid tag (e.g. 100 vs 100, 600 vs 600).
+
 ### Defining user specific information
 
-You will need to create a text file named ```passwords.ini```. Paste and fill the following text with the relevant information.
-If you are not using the OCLC API, you can not include that section; you don't need credentials when you want to compare with the LOC API.
+You will need to create a text file named ```passwords.ini``` in the ```src/``` directory. Paste and fill the following text and subsitute your credentials. If you are not using the OCLC API, you may skip the ```[oclc]``` section; you don't need credentials when you want to compare with the LOC API.
 
 ```
 [oclc]
@@ -50,29 +52,34 @@ HOST = database_host_information
 DATABASE = database_name
 ```
 
-How to lookup idns and id: https://help.oclc.org/Metadata_Services/WorldShare_Collection_Manager/Troubleshooting/How_do_I_set_up_Marc_Edit_OCLC_Integration
+How to lookup your OCLC idns and id: https://help.oclc.org/Metadata_Services/WorldShare_Collection_Manager/Troubleshooting/How_do_I_set_up_Marc_Edit_OCLC_Integration
 
 ### Defining subfields, queries and tags
+Replace the relevant information in ```compare_config.ini```. Sample queries are provided.
 
-Specify the subfields you would like to compare for your tags in ```[subfields]``` separated by commas.
+Specify the subfields you would like to compare for your tags in the ```[subfields]``` section separated by commas.
 
-Specify your SQL queries depending on the API in ```SQL_OCLC_QUERY``` or/and ```SQL_LOC_QUERY```. You will need to extract the following fields for each record from your local database; all fields are required unless otherwise stated:
+Specify your API specific SQL queries depending on the API in ```SQL_OCLC_QUERY``` or/and ```SQL_LOC_QUERY```. You will need to extract the following fields for each record from your local database; all fields are required unless otherwise stated:
 - bib_id: a bib id
 - tag: a field
 - ord: an ordinal
-- heading: the subfield content of the marc record separated by $ (e.g. "$aMcKee, Edwin D.,$d1906-1984")
-- language: (optional)
-- location: (optional)
+- heading: the subfield content of the marc record separated by "$" (e.g. "$aMcKee, Edwin D.,$d1906-1984")
+- language: the language of the holding (optional)
+- location: the physical location of the particular record (optional)
 
-If the api is OCLC, you will also need the following field:
+If the api is OCLC, you will also need the following field from your database:
 - oclc: an oclc number
 
 ### Running the tool
-After filling in your information in ```compare_config.ini```, you may run the project from your shell (e.g. bash or powershell). Navigate to ```src/``` and run the following command:
+You may run the tool from your shell (e.g. bash or powershell). If you are running this on a Windows computer you might want to consider installing Anaconda, which comes with a convenient Anaconda powershell prompt.
+
+Navigate to ```src/``` and run the following command:
 
 ```
 python compare.py [api_name] [number_of_records]
 ```
+
+Where ```api_name``` is either "loc" or "oclc" and ```number_of_records``` is an integer or "all".
 
 Here are a couple examples of how to use the program:
 
@@ -85,13 +92,12 @@ python compare.py loc 100
 python compare.py oclc all
 ```
 
-Note that the API (oclc or loc) should always be specified and the maximum number of records must be specified as an integer or ```all```.
-
 ### Checking your results
 Your log and report of inconsistencies will appear in the ```outputs/``` folder with the following information: 
 - log: bib_id, tag, subfield, uchicago_name, authority_name, language, location
 - report: timestamp, bib_id, tag, ord, authority_id, error_message
 
 ## Acknowledgements
+This tool was developed as part of the Hanna Holborn Gray Graduate Fellowship for Linked Data Management.
 
 ## License

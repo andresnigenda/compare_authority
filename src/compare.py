@@ -47,7 +47,7 @@ except Exception as e:
 
 USER_DEFINED_SUBFIELDS = config.get("subfields", "USER_DEFINED_SUBFIELDS")
 USER_DEFINED_SUBFIELDS = [s.replace(" ", "") for s in USER_DEFINED_SUBFIELDS.split(',')]
-USER_DEFINED_TAG = config.get("subfields", "USER_DEFINED_TAG")
+USER_DEFINED_TAG = config.get("subfields", "USER_DEFINED_API_TAG")
 
 # Throttle
 T = 3
@@ -55,7 +55,7 @@ T = 3
 
 # General functions for analysis of MARC fields
 #@profile
-def compare_records(usr=USER, pwd=PASSWORD, api='loc', limit=1000, hst=HOST, db=DATABASE, return_mode=True):
+def compare_records(api, usr=USER, pwd=PASSWORD, limit=1000, hst=HOST, db=DATABASE, return_mode=True):
     '''
     Compare local library's MARC records with authority records from either the Library of Congress' (LOC) or
     OCLC.
@@ -74,34 +74,36 @@ def compare_records(usr=USER, pwd=PASSWORD, api='loc', limit=1000, hst=HOST, db=
     '''
     try:
         # connect to database
-        # add oclc 035 tag if query is to OCLC api
-        
         if api == "oclc":
             query = config.get("sql", "SQL_OCLC_QUERY").replace("\n", " ").replace("\'", "'")
         elif api == "loc":
             query =  config.get("sql", "SQL_LOC_QUERY").replace("\n", " ").replace("\'", "'")
         else:
-            print("[!] Invalid API name, defaulting to LOC")
-            api = "loc"
-            query = config.get("sql", "SQL_LOC_QUERY").replace("\n", " ").replace("\'", "'")
+            raise SyntaxError
 
         if api == "oclc":
             authority_tag = re.search('tag in \((\d+)', query).group(1)
             assert USER_DEFINED_TAG == authority_tag
         
         if api == "loc":
-            # TO DO this needs to check each tag
-            authority_tag = re.search('tag in \((\d+)', query).group(1)
-            assert USER_DEFINED_TAG[-2:] == authority_tag[-2:]
+            # get all tags after the "tag in "
+            # source for this regex: https://stackoverflow.com/questions/26176812/regex-match-for-number-within-parenthesis-separated-by-comma
+            authority_tags = re.search('tag in \((\d+(?:,\s*\d+)*)\)', query).group(1).replace(' ', '').split(',')
+            for authority_tag in authority_tags:
+                # check for each loc tag that
+                assert USER_DEFINED_TAG[-2:] == authority_tag[-2:]
         
         # add a limit to the query
         if limit != 'all':
             query += " limit {} ".format(batch_size)
 
         print("")
-        print("Your SQL query: ", query)
+        print("Your {} SQL query: {}".format(api, query))
         print("")
-        print("Comparing subfields {} in tag {} with tag {}".format(USER_DEFINED_SUBFIELDS, USER_DEFINED_TAG, authority_tag))
+        if api == "oclc":
+            print("Comparing subfields {} in tag {} with tag {}".format(USER_DEFINED_SUBFIELDS, USER_DEFINED_TAG, authority_tag))
+        else:
+            print("Comparing subfields {} in tag {} with tag(s) {}".format(USER_DEFINED_SUBFIELDS, USER_DEFINED_TAG, authority_tags))
         print("")
 
         connection, cursor = connect_to_database(usr, pwd, hst, db, query)
@@ -129,8 +131,13 @@ def compare_records(usr=USER, pwd=PASSWORD, api='loc', limit=1000, hst=HOST, db=
 
         if return_mode:
             return authority_dict
+
     except AssertionError as e:
-        print("Non-valid tag comparison")
+        print("[!] Non-valid tag comparison: {} vs {}".format(USER_DEFINED_TAG, authority_tag))
+    except AttributeError as e:
+        print("[!] Non-valid query")
+    except SyntaxError as e:
+        print("[!] Invalid API name, ", e)
     except Exception as e:
         print("Unexpected main program error:", e)
     
@@ -186,7 +193,7 @@ def process_data(data, max_records, authority_dict, log_path, inconsistencies_pa
         try:
             session = create_oclc_session(WC_KEY, SECRET, PRINCIPAL_ID, PRINCIPAL_IDNS)
         except Exception as e:
-            print("Unable to connect to OcLC: ", e)
+            print("[!] Unable to connect to OcLC: ", e)
     
     # iterate through records that were retrieved from local MARC table
     for i, record in enumerate(tqdm(data)):
@@ -218,9 +225,9 @@ def process_data(data, max_records, authority_dict, log_path, inconsistencies_pa
                     try:
                         w.writerow([datetime.now(), bib_id, tag, ordi, uri, e])
                     except Exception as eb:
-                        print("write error: ", eb)
+                        print("[!] Could not write to csv error: ", eb)
         except Exception as e:
-            print("Unexpected error:", e)
+            print("[!] Unexpected error:", e)
         
 
 #@profile
@@ -239,7 +246,7 @@ def compare_subfields(local_d, authority_d, inconsistencies_path, session):
     # fetch from API content or update authority dictionary
     authority_content = fetch_authority_content(local_d['authority_id'], authority_d, session)
     
-    ## TO DO: DO STRIP MORE EFFICIENTLY! AND OPEN THE WRITE ONLY WHEN NECESSARY!?
+    ## TO DO: DO STRIP MORE EFFICIENTLY!
     # append to csv
     with open(inconsistencies_path, "a", newline="") as f:
         w = csv.writer(f)
@@ -263,7 +270,7 @@ def compare_subfields(local_d, authority_d, inconsistencies_path, session):
                         else:
                             continue
                 except Exception as e:
-                    print("e2: ", local_d, e)
+                    print("[!] Unexpected error in compare_subfields(): ", local_d, e)
 
 
 def fetch_authority_content(authority_id, authority_dict, session):
@@ -326,7 +333,7 @@ def fetch_data(uchicago_cursor):
                 # initialize dictionary
                 temp_dict = dict(zip(columns, row))
             else:
-                print("Length mismatch: record has ", len(row), " attributes, expected ", len_cols)
+                print("[!] Length mismatch: record has ", len(row), " attributes, expected ", len_cols)
                 continue
             # extract fields from heading
             sf_dict = extract_subfields(temp_dict['heading'])
@@ -336,15 +343,13 @@ def fetch_data(uchicago_cursor):
                 try:
                     temp_dict['authority_id'] = sf_dict.get('0', None)[0]
                 except Exception as e:
-                    print("0 sf does not exist")
+                    print("[!] 0 sf does not exist")
             elif api == 'oclc':
                 temp_dict['authority_id'] = temp_dict.get('oclc', None)
             temp_dict['marc'] = sf_dict
-            # the unique identifier will be bib_id + tag + ord
-            #u_id = str(bib_id) + '_' + str(tag) + '_' + str(ordi)
             data.append(temp_dict)
         except Exception as e:
-            print('error fetching data', row, e)
+            print('[!] Could not fetch data from local database', row, e)
     
     return data
 
@@ -442,7 +447,7 @@ def fetch_authority_names(root, loc_tag='100'):
                 # get subfields
                 result_100 = fetch_subfields(child, USER_DEFINED_SUBFIELDS)
     except Exception as e:
-        print("fetch loc error: ", e)
+        print("[!] XML fetching error: ", e)
 
     content = [result_100]
     
@@ -486,13 +491,6 @@ def connect_to_database(usr, pwd, hst, db, query):
     cursor.execute(query)
 
     return connection, cursor
-
-# next steps: ADD DATE and NAME comparison
-
-# past functions
-#test_html = "http://id.loc.gov/authorities/names/n82245990.html"
-#test_html = uri
-#"http://id.loc.gov/authorities/names/n82245990.madsxml.xml"
 
 
 if __name__ == "__main__":
