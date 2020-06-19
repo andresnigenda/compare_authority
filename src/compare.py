@@ -49,9 +49,8 @@ USER_DEFINED_SUBFIELDS = config.get("subfields", "USER_DEFINED_SUBFIELDS")
 USER_DEFINED_SUBFIELDS = [s.replace(" ", "") for s in USER_DEFINED_SUBFIELDS.split(',')]
 USER_DEFINED_TAG = config.get("subfields", "USER_DEFINED_API_TAG")
 
-# Throttle
+# Throttle for LOC
 T = 3
-
 
 # General functions for analysis of MARC fields
 #@profile
@@ -293,13 +292,14 @@ def fetch_authority_content(authority_id, authority_dict, session):
     authority_content = authority_dict.get(authority_id)
     # if authority_content is None, we need to call the API
     if not authority_content:
-        # sleep between requests
-        time.sleep(T)
         if session:
-            # oclc
+            # sleep one sec between oclc requests
+            time.sleep(1)
             authority_id = str(authority_id)
             r = session.get_record(oclc_number=authority_id)
         else:
+            # sleep T between requests (recommended 3)
+            time.sleep(T)
             # loc
             xml_uri = get_marc_xml(authority_id) # get xml url
             r = requests.get(xml_uri) # GET request to LOC API
