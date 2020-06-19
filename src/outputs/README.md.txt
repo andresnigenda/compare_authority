@@ -1,1 +1,0 @@
-Your log and inconsistencies files will be stored here.
